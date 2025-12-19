@@ -1,6 +1,7 @@
-
 {
-  "name": "PPB - Gestione Spese",
-  "description": "Sistema di gestione per il monitoraggio degli ordini di lavoro, risultati delle gare d'appalto e progresso finanziario per capitoli.",
-  "requestFramePermissions": []
+  "name": "PPB 1.2  ottimizzazione cellulare",
+  "description": "Sistema professionale per il monitoraggio del ciclo finanziario: Fondi, Affidamenti e Pagamenti del CME Lombardia.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
