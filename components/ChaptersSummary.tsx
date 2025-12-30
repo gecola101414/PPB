@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { FundingIDV, WorkOrder, ChapterStats, WorkStatus } from '../types';
+import { FundingIDV, WorkOrder, WorkStatus } from '../types';
 
 interface ChaptersSummaryProps {
   idvs: FundingIDV[];
@@ -9,124 +9,132 @@ interface ChaptersSummaryProps {
 }
 
 export const getChapterColor = (chapter: string) => {
-  const colors = [
-    'indigo', 'emerald', 'amber', 'rose', 'cyan', 
-    'violet', 'orange', 'blue', 'teal', 'fuchsia'
-  ];
+  const colors = ['indigo', 'emerald', 'amber', 'rose', 'cyan', 'violet', 'orange', 'blue', 'teal', 'fuchsia'];
   let hash = 0;
-  for (let i = 0; i < chapter.length; i++) {
-    hash = chapter.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < chapter.length; i++) { hash = chapter.charCodeAt(i) + ((hash << 5) - hash); }
   return colors[Math.abs(hash) % colors.length];
 };
 
 const ChaptersSummary: React.FC<ChaptersSummaryProps> = ({ idvs, orders, onChapterClick }) => {
   
   const statsByChapter = useMemo(() => {
-    const stats: Record<string, ChapterStats> = {};
+    const stats: Record<string, {
+      capitolo: string,
+      totalBudget: number,
+      pds: number,
+      committed: number,
+      completed: number
+    }> = {};
     
-    // Inizializza i capitoli dai fondi
     idvs.forEach(idv => {
       const cap = idv.capitolo;
       if (!stats[cap]) {
-        stats[cap] = { capitolo: cap, totalBudget: 0, committed: 0, contracted: 0, spent: 0, available: 0 };
+        stats[cap] = { capitolo: cap, totalBudget: 0, pds: 0, committed: 0, completed: 0 };
       }
       stats[cap].totalBudget += idv.amount;
     });
 
-    // Calcola l'impegnato reale per ogni capitolo
     orders.forEach(o => {
-      // Trova a quale capitolo appartiene questa pratica guardando i suoi IDV collegati
       const linkedIdv = idvs.find(i => o.linkedIdvIds.includes(i.id));
-      if (linkedIdv) {
+      if (linkedIdv && stats[linkedIdv.capitolo]) {
         const cap = linkedIdv.capitolo;
-        if (stats[cap]) {
-          // Il valore impegnato è il valore più recente della pratica
-          const currentVal = o.paidValue || o.contractValue || o.estimatedValue;
-          stats[cap].committed += currentVal;
+        const val = (o.paidValue || o.contractValue || o.estimatedValue);
+        
+        stats[cap].pds += val;
+        if (o.status === WorkStatus.AFFIDAMENTO || o.status === WorkStatus.PAGAMENTO) {
+          stats[cap].committed += (o.contractValue || o.estimatedValue);
+        }
+        if (o.status === WorkStatus.PAGAMENTO) {
+          stats[cap].completed += (o.paidValue || o.contractValue || o.estimatedValue);
         }
       }
-    });
-
-    // Calcola il residuo (Previsto Impegno)
-    Object.keys(stats).forEach(cap => {
-      stats[cap].available = stats[cap].totalBudget - stats[cap].committed;
     });
 
     return Object.values(stats).sort((a, b) => a.capitolo.localeCompare(b.capitolo));
   }, [idvs, orders]);
 
+  const ConvergenceLine = ({ label, value, total, color, bg }: { label: string, value: number, total: number, color: string, bg: string }) => {
+    const percent = Math.min(100, Math.max(0, (value / total) * 100));
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between items-center px-1">
+          <span className="text-[7px] font-black uppercase text-slate-400 tracking-widest">{label}</span>
+          <span className={`text-[9px] font-black ${color}`}>€{value.toLocaleString()}</span>
+        </div>
+        <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
+          <div 
+            className={`h-full rounded-full transition-all duration-1000 ${bg}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Riepilogo Stato Capitoli</h2>
-        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Bilancio Integrato: Assegnazione vs Impegni Reali</p>
+    <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+      {/* Somma Pastello Header */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">Convergenza Economica</h2>
+          <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em] mt-1">Stato dei Capitoli verso il 100% dell'assegnato</p>
+        </div>
+        <div className="flex gap-10">
+           <div className="text-center">
+              <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Massa Totale</p>
+              <p className="text-2xl font-black text-slate-800">€{statsByChapter.reduce((a, b) => a + b.totalBudget, 0).toLocaleString()}</p>
+           </div>
+           <div className="text-center">
+              <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Completato</p>
+              <p className="text-2xl font-black text-emerald-600">€{statsByChapter.reduce((a, b) => a + b.completed, 0).toLocaleString()}</p>
+           </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {statsByChapter.map((c) => {
-          const percUsed = (c.committed / c.totalBudget) * 100;
           const color = getChapterColor(c.capitolo);
-          
+          const completionRate = Math.round((c.completed / c.totalBudget) * 100);
+
           return (
-            <div 
-              key={c.capitolo}
-              className={`bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col lg:flex-row items-center gap-10`}
-            >
-              {/* Box Capitolo Cliccabile */}
-              <button 
-                onClick={() => onChapterClick(c.capitolo)}
-                className={`flex flex-col items-center justify-center text-white w-24 h-24 rounded-3xl shadow-xl flex-shrink-0 transition-all hover:scale-110 active:scale-95 bg-${color}-600 ring-4 ring-transparent hover:ring-${color}-200`}
-              >
-                <span className="text-[10px] font-black opacity-60 uppercase tracking-widest">Cap.</span>
-                <span className="text-2xl font-black">{c.capitolo}</span>
-              </button>
-
-              {/* Dati Finanziari con Titoli Interattivi */}
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Assegnazione (Fondi)</span>
-                  <span className="text-2xl font-black text-slate-900">€{c.totalBudget.toLocaleString()}</span>
-                </div>
-                
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Impegnato (Lavori)</span>
-                  <span className={`text-2xl font-black text-${color}-600`}>€{c.committed.toLocaleString()}</span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Residuo (Previsto Impegno)</span>
-                  <span className={`text-2xl font-black ${c.available < 0 ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
-                    €{c.available.toLocaleString()}
-                  </span>
+            <div key={c.capitolo} className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 hover:shadow-md transition-all group">
+              <div className="flex items-center gap-6 mb-8">
+                <button 
+                  onClick={() => onChapterClick(c.capitolo)}
+                  className={`w-16 h-16 rounded-[1.5rem] bg-${color}-50 text-${color}-700 border border-${color}-100 flex flex-col items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all`}
+                >
+                  <span className="text-[8px] font-black opacity-60">CAP.</span>
+                  <span className="text-2xl font-black">{c.capitolo}</span>
+                </button>
+                <div className="flex-1">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Budget Fondo</span>
+                      <p className="text-2xl font-black text-slate-800">€{c.totalBudget.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                       <span className="text-[8px] font-black text-slate-400 uppercase">Avanzamento</span>
+                       <p className={`text-xl font-black text-${color}-600`}>{completionRate}%</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Progress Bar & Dettaglio */}
-              <div className="w-full lg:w-64 flex flex-col gap-4">
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden flex">
-                  <div 
-                    className={`h-full transition-all duration-1000 ${percUsed > 100 ? 'bg-rose-500' : percUsed > 85 ? 'bg-amber-500' : `bg-${color}-500`}`}
-                    style={{ width: `${Math.min(percUsed, 100)}%` }}
-                  ></div>
-                </div>
-                <button 
-                  onClick={() => onChapterClick(c.capitolo)}
-                  className={`w-full py-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-${color}-600 hover:text-white hover:border-${color}-600 transition-all flex items-center justify-center gap-2`}
-                >
-                  Vedi Dettaglio Analitico
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
-                </button>
+              <div className="space-y-4">
+                <ConvergenceLine label="1. Previsto Impegno (PDS)" value={c.pds} total={c.totalBudget} color="text-amber-600" bg="bg-amber-400" />
+                <ConvergenceLine label="2. Impegnato (Fase 2)" value={c.committed} total={c.totalBudget} color="text-indigo-600" bg="bg-indigo-500" />
+                <ConvergenceLine label="3. Completato (Liquidato)" value={c.completed} total={c.totalBudget} color="text-emerald-600" bg="bg-emerald-500" />
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-50 flex justify-between items-center">
+                 <span className="text-[8px] font-black uppercase text-slate-400">Residuo di Capitolo</span>
+                 <span className={`text-sm font-black ${c.totalBudget - c.completed < 0 ? 'text-rose-600' : 'text-slate-600'}`}>
+                   €{(c.totalBudget - c.completed).toLocaleString()}
+                 </span>
               </div>
             </div>
           );
         })}
-
-        {statsByChapter.length === 0 && (
-          <div className="bg-white p-20 rounded-[3rem] border-2 border-dashed border-slate-200 text-center">
-            <p className="text-slate-400 font-black uppercase tracking-widest">Nessun capitolo registrato nel sistema</p>
-          </div>
-        )}
       </div>
     </div>
   );

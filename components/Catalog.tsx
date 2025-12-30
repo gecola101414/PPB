@@ -36,7 +36,6 @@ const Catalog: React.FC<CatalogProps> = ({
     [...orders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
   [orders]);
 
-  // Gestione scroll automatico verso l'elemento evidenziato
   useEffect(() => {
     if (highlightedOrderId && rowRefs.current[highlightedOrderId]) {
       setTimeout(() => {
@@ -150,18 +149,120 @@ const Catalog: React.FC<CatalogProps> = ({
       return 'future';
     };
 
+    const isPhaseClickable = (phaseKey: WorkStatus) => {
+      if (order.locked) return false;
+      if (phaseKey === WorkStatus.PROGETTO) return true;
+      if (phaseKey === WorkStatus.AFFIDAMENTO) return true;
+      if (phaseKey === WorkStatus.PAGAMENTO) {
+        return order.status !== WorkStatus.PROGETTO;
+      }
+      return false;
+    };
+
+    const handlePhaseClick = (phaseKey: WorkStatus) => {
+      if (!isPhaseClickable(phaseKey)) return;
+      if (phaseKey === WorkStatus.PROGETTO) onEdit(order);
+      else if (phaseKey === WorkStatus.AFFIDAMENTO) onAction(order, WorkStatus.AFFIDAMENTO);
+      else if (phaseKey === WorkStatus.PAGAMENTO) onAction(order, WorkStatus.PAGAMENTO);
+    };
+
     return (
       <div className="flex items-center gap-0 min-w-[450px] pt-8 pb-4">
         {phases.map((p, i) => {
           const state = getPhaseState(p.key);
           const isActive = state === 'current' || state === 'completed';
           const isCurrent = state === 'current';
+          const isClickable = isPhaseClickable(p.key);
           
           return (
             <React.Fragment key={p.id}>
-              {/* Nodo Fase */}
-              <div className="flex flex-col items-center relative">
-                {/* Valore sopra il pallino */}
+              <div className="flex flex-col items-center relative group/phase">
+                
+                {/* Popover Informativo su Hover */}
+                <div className="absolute bottom-full mb-10 opacity-0 group-hover/phase:opacity-100 group-hover/phase:-translate-y-1 pointer-events-none transition-all duration-300 z-50 w-64">
+                  <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl shadow-indigo-500/20 text-left">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-${p.color}-500/20 text-${p.color}-400`}>
+                        {p.label}
+                      </span>
+                      <span className="text-[10px] font-black text-white/40">STEP {p.id}</span>
+                    </div>
+
+                    {p.id === 1 && (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Stima Iniziale</p>
+                          <p className="text-lg font-black text-white">€{order.estimatedValue.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Copertura Fondi</p>
+                          <p className="text-[10px] font-bold text-indigo-400 mt-0.5">{getOrderIdvs(order.linkedIdvIds)}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {p.id === 2 && (
+                      <div className="space-y-3">
+                        {order.winner ? (
+                          <>
+                            <div>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Ditta Aggiudicataria</p>
+                              <p className="text-[11px] font-black text-white uppercase leading-tight mt-0.5">{order.winner}</p>
+                            </div>
+                            <div className="flex justify-between items-end border-t border-white/5 pt-2">
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Contratto</p>
+                                <p className="text-sm font-black text-white">€{(order.contractValue || 0).toLocaleString()}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">Risparmio</p>
+                                <p className="text-[11px] font-black text-emerald-400">€{(order.estimatedValue - (order.contractValue || 0)).toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-[10px] text-slate-500 italic">Dati non ancora inseriti</p>
+                        )}
+                      </div>
+                    )}
+
+                    {p.id === 3 && (
+                      <div className="space-y-3">
+                        {order.paidValue ? (
+                          <>
+                            <div>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Liquidato Finale</p>
+                              <p className="text-lg font-black text-emerald-400">€{order.paidValue.toLocaleString()}</p>
+                            </div>
+                            <div className="flex justify-between border-t border-white/5 pt-2">
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Data CRE</p>
+                                <p className="text-[10px] font-black text-white">{order.creDate || 'In attesa'}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Documento</p>
+                                <p className="text-[10px] font-black text-white">Fattura Registrata</p>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-[10px] text-slate-500 italic">In attesa di liquidazione</p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2">
+                       <div className={`w-1.5 h-1.5 rounded-full ${isActive ? `bg-${p.color}-500 shadow-[0_0_8px] shadow-${p.color}-500` : 'bg-slate-700'}`}></div>
+                       <p className="text-[8px] font-black uppercase text-slate-400 tracking-[0.1em]">
+                         Stato: {state === 'completed' ? 'COMPLETATO' : state === 'current' ? 'IN CORSO' : 'IN CODA'}
+                       </p>
+                    </div>
+                  </div>
+                  {/* Triangolino Popover */}
+                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-slate-900 absolute left-1/2 -translate-x-1/2"></div>
+                </div>
+
+                {/* Valore statico sopra (opzionale se c'è popover, ma lo teniamo per glance) */}
                 <div className={`absolute -top-6 whitespace-nowrap transition-all duration-500 ${isActive ? 'opacity-100 -top-7' : 'opacity-30'}`}>
                   {p.value !== undefined ? (
                     <span className={`text-[10px] font-black bg-white px-2 py-0.5 rounded-lg border shadow-sm ${isActive ? `text-${p.color}-700 border-${p.color}-200` : 'text-slate-400 border-slate-100'}`}>
@@ -172,27 +273,35 @@ const Catalog: React.FC<CatalogProps> = ({
                   )}
                 </div>
 
-                <div className={`
-                  w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-500 border-2
-                  ${isActive 
-                    ? `bg-${p.color}-600 border-${p.color}-600 text-white shadow-lg shadow-${p.color}-500/30` 
-                    : 'bg-white border-slate-200 text-slate-300'}
-                  ${isCurrent ? `ring-4 ring-${p.color}-100 animate-pulse scale-110 z-10` : ''}
-                `}>
+                <button 
+                  type="button"
+                  onClick={() => handlePhaseClick(p.key)}
+                  disabled={!isClickable}
+                  className={`
+                    w-10 h-10 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-500 border-2
+                    ${isActive 
+                      ? `bg-${p.color}-600 border-${p.color}-600 text-white shadow-lg shadow-${p.color}-500/30` 
+                      : 'bg-white border-slate-200 text-slate-300'}
+                    ${isCurrent ? `ring-4 ring-${p.color}-100 scale-110 z-10` : ''}
+                    ${isClickable 
+                      ? 'cursor-pointer hover:scale-125 hover:rotate-12 active:scale-95' 
+                      : 'cursor-not-allowed grayscale opacity-40'}
+                  `}
+                >
                   {state === 'completed' ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   ) : p.id}
-                </div>
+                </button>
                 
                 <span className={`
                   absolute -bottom-6 whitespace-nowrap text-[8px] font-black uppercase tracking-tighter transition-colors
                   ${isActive ? `text-${p.color}-700` : 'text-slate-300'}
+                  ${isClickable ? 'group-hover/phase:text-indigo-600' : ''}
                 `}>
                   {p.label}
                 </span>
               </div>
 
-              {/* Linea di collegamento */}
               {i < phases.length - 1 && (
                 <div className="flex-1 px-1">
                   <div className={`h-[2px] w-full transition-all duration-700 ${state === 'completed' ? `bg-${phases[i+1].color}-600` : 'bg-slate-100'}`}></div>
@@ -234,7 +343,7 @@ const Catalog: React.FC<CatalogProps> = ({
       <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center flex-shrink-0 sticky top-0 z-30">
         <div>
           <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter">Registro Lavori Progressivo</h3>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Monitoraggio Fasi e Flusso Finanziario Integrato</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Avvicinati ai pallini per i dettagli rapidi • Clicca per gestire la fase</p>
         </div>
         <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">{orders.length} Pratiche</div>
       </div>
@@ -243,10 +352,10 @@ const Catalog: React.FC<CatalogProps> = ({
         <table className="w-full text-left border-separate border-spacing-0">
           <thead className="sticky top-0 z-20 shadow-sm">
             <tr className="bg-slate-100">
-              <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Prog..</th>
+              <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Prog.</th>
               <th className="px-10 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-100">Dettaglio Intervento & Numero Pratica</th>
-              <th className="px-10 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Timeline Workflow & Contabilità per Fase</th>
-              <th className="px-10 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Azioni</th>
+              <th className="px-10 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Timeline Progressiva Workflow</th>
+              <th className="px-10 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center bg-slate-100">Opzioni</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -314,15 +423,9 @@ const Catalog: React.FC<CatalogProps> = ({
                     </div>
                   </td>
                   <td className="px-10 py-12 text-center align-top">
-                    <div className="flex flex-col justify-center items-center gap-3">
-                      {o.status === WorkStatus.PROGETTO && <button disabled={o.locked} onClick={() => onAction(o, WorkStatus.AFFIDAMENTO)} className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-white rounded-2xl shadow-xl active:scale-95 transition-all ${o.locked ? 'bg-slate-300' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}`}><span className="text-[10px] font-black uppercase tracking-widest">Affidamento</span></button>}
-                      {o.status === WorkStatus.AFFIDAMENTO && <button disabled={o.locked} onClick={() => onAction(o, WorkStatus.PAGAMENTO)} className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-white rounded-2xl shadow-xl active:scale-95 transition-all ${o.locked ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}><span className="text-[10px] font-black uppercase tracking-widest">Liquidazione</span></button>}
-                      
-                      <div className="flex items-center gap-1 mt-2">
-                        <button onClick={() => onToggleLock(o.id)} className={`p-3 rounded-2xl transition-all shadow-sm ${o.locked ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'}`} title="Blocca/Sblocca">{o.locked ? <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"></path></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>}</button>
-                        <button disabled={o.locked} onClick={() => onEdit(o)} className={`p-3 rounded-2xl transition-all shadow-sm ${o.locked ? 'text-slate-300 bg-slate-50' : 'text-slate-400 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'}`} title="Modifica"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                        <button disabled={o.locked} onClick={() => onDelete(o.id)} className={`p-3 rounded-2xl transition-all shadow-sm ${o.locked ? 'text-slate-300 bg-slate-50' : 'text-slate-400 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'}`} title="Elimina"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                      </div>
+                    <div className="flex items-center justify-center gap-3 pt-4">
+                      <button onClick={() => onToggleLock(o.id)} className={`p-4 rounded-2xl transition-all shadow-sm ${o.locked ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'}`} title="Blocca/Sblocca">{o.locked ? <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"></path></svg> : <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>}</button>
+                      <button disabled={o.locked} onClick={() => onDelete(o.id)} className={`p-4 rounded-2xl transition-all shadow-sm ${o.locked ? 'text-slate-300 bg-slate-50' : 'text-slate-400 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'}`} title="Elimina"><svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                     </div>
                   </td>
                 </tr>
