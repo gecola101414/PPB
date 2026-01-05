@@ -1,7 +1,9 @@
+
 {
-  "name": "PPB 1.3  ottimizzazione cellulare",
-  "description": "Sistema professionale per il monitoraggio del ciclo finanziario: Fondi, Affidamenti e Pagamenti del CME Lombardia.",
+  "name": "PPB3.3 video chiamata",
+  "description": "Sistema professionale per il monitoraggio del ciclo finanziario con cifratura AES-256-GCM e protezione anti-manomissione.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }

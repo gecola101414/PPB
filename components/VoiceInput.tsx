@@ -8,52 +8,68 @@ interface VoiceInputProps {
   type?: 'text' | 'number' | 'textarea';
   className?: string;
   required?: boolean;
+  disabled?: boolean;
 }
 
-export const VoiceInput: React.FC<VoiceInputProps> = ({ value, onChange, placeholder, type = 'text', className, required }) => {
+export const VoiceInput: React.FC<VoiceInputProps> = ({ value, onChange, placeholder, type = 'text', className, required, disabled }) => {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const initialValueRef = useRef<string | number>('');
+  
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'it-IT';
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'it-IT';
 
-      recognitionRef.current.onresult = (event: any) => {
+      recognition.onresult = (event: any) => {
         const transcript = Array.from(event.results)
           .map((result: any) => result[0])
           .map((result: any) => result.transcript)
           .join('');
         
-        // Appendiamo il trascritto al valore iniziale per non cancellare il testo precedente
         const baseValue = initialValueRef.current.toString();
         let newValue = baseValue + (baseValue.length > 0 && !baseValue.endsWith(' ') ? ' ' : '') + transcript;
         
-        // Se è un numero, cerchiamo di estrarre solo le cifre
         if (type === 'number') {
           newValue = newValue.replace(/[^0-9]/g, '');
         }
         
-        onChange(newValue);
+        onChangeRef.current(newValue);
       };
 
-      recognitionRef.current.onend = () => {
+      recognition.onend = () => {
         setIsListening(false);
       };
+
+      recognitionRef.current = recognition;
     }
-  }, [onChange, type]);
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [type]);
 
   const startListening = (e: React.MouseEvent) => {
+    if (disabled) return;
     if (e.button !== 0) return; 
     if (recognitionRef.current && !isListening) {
-      // Memorizziamo il valore attuale prima di iniziare a sentire
       initialValueRef.current = value === 0 ? '' : value;
       setIsListening(true);
-      recognitionRef.current.start();
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.warn("Speech recognition already started");
+      }
     }
   };
 
@@ -64,8 +80,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ value, onChange, placeho
     }
   };
 
-  // Rimuoviamo lo zero iniziale per i campi numerici se l'utente clicca
   const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (disabled) return;
     if (type === 'number' && value === 0) {
       onChange('');
     }
@@ -73,14 +89,15 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ value, onChange, placeho
 
   const commonProps = {
     value: value === 0 && type === 'number' ? '' : value,
-    onChange: (e: any) => onChange(e.target.value),
+    onChange: (e: any) => !disabled && onChange(e.target.value),
     onFocus: handleFocus,
     onMouseDown: startListening,
     onMouseUp: stopListening,
     onMouseLeave: stopListening,
     placeholder: isListening ? 'Ascoltando...' : placeholder,
     required,
-    className: `${className} ${isListening ? 'ring-4 ring-indigo-400 bg-indigo-50 animate-pulse' : ''} transition-all duration-200 cursor-pointer`
+    disabled,
+    className: `${className} ${isListening ? 'ring-4 ring-indigo-400 bg-indigo-50 animate-pulse' : ''} ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} transition-all duration-200`
   };
 
   if (type === 'textarea') {
